@@ -1,6 +1,10 @@
 package jpeg2000
 
-import "image"
+import (
+	"image"
+
+	hwyimage "github.com/ajroetker/go-highway/hwy/contrib/image"
+)
 
 // applyRCT applies inverse Reversible Color Transform (lossless)
 // Converts from YCbCr to RGB using integer arithmetic
@@ -14,24 +18,21 @@ func applyRCT(y, cb, cr [][]int32) (r, g, b [][]int32) {
 	}
 	width := len(y[0])
 
-	r = make([][]int32, height)
-	g = make([][]int32, height)
-	b = make([][]int32, height)
+	buf := getInt32Buf(width, height)
+	defer putInt32Buf(buf)
 
-	for i := range height {
-		r[i] = make([]int32, width)
-		g[i] = make([]int32, width)
-		b[i] = make([]int32, width)
+	// Copy inputs into pooled images
+	slicesToImageInPlace(y, buf.imgs[0])
+	slicesToImageInPlace(cb, buf.imgs[1])
+	slicesToImageInPlace(cr, buf.imgs[2])
 
-		for j := range width {
-			// G = Y - floor((Cb + Cr) / 4)
-			g[i][j] = y[i][j] - ((cb[i][j] + cr[i][j]) >> 2)
-			// R = Cr + G
-			r[i][j] = cr[i][j] + g[i][j]
-			// B = Cb + G
-			b[i][j] = cb[i][j] + g[i][j]
-		}
-	}
+	// Apply SIMD inverse RCT
+	hwyimage.InverseRCT(buf.imgs[0], buf.imgs[1], buf.imgs[2], buf.imgs[3], buf.imgs[4], buf.imgs[5])
+
+	// Convert back to slices
+	r = imageToSlices(buf.imgs[3])
+	g = imageToSlices(buf.imgs[4])
+	b = imageToSlices(buf.imgs[5])
 
 	return r, g, b
 }
@@ -48,31 +49,21 @@ func applyICT(y, cb, cr [][]float64) (r, g, b [][]float64) {
 	}
 	width := len(y[0])
 
-	r = make([][]float64, height)
-	g = make([][]float64, height)
-	b = make([][]float64, height)
+	buf := getFloat64Buf(width, height)
+	defer putFloat64Buf(buf)
 
-	const (
-		crToR = 1.402
-		cbToG = 0.344136
-		crToG = 0.714136
-		cbToB = 1.772
-	)
+	// Copy inputs into pooled images
+	slicesToImageInPlace(y, buf.imgs[0])
+	slicesToImageInPlace(cb, buf.imgs[1])
+	slicesToImageInPlace(cr, buf.imgs[2])
 
-	for i := range height {
-		r[i] = make([]float64, width)
-		g[i] = make([]float64, width)
-		b[i] = make([]float64, width)
+	// Apply SIMD inverse ICT
+	hwyimage.InverseICT(buf.imgs[0], buf.imgs[1], buf.imgs[2], buf.imgs[3], buf.imgs[4], buf.imgs[5])
 
-		for j := range width {
-			// R = Y + 1.402 * Cr
-			r[i][j] = y[i][j] + crToR*cr[i][j]
-			// G = Y - 0.344136 * Cb - 0.714136 * Cr
-			g[i][j] = y[i][j] - cbToG*cb[i][j] - crToG*cr[i][j]
-			// B = Y + 1.772 * Cb
-			b[i][j] = y[i][j] + cbToB*cb[i][j]
-		}
-	}
+	// Convert back to slices
+	r = imageToSlices(buf.imgs[3])
+	g = imageToSlices(buf.imgs[4])
+	b = imageToSlices(buf.imgs[5])
 
 	return r, g, b
 }
@@ -93,24 +84,21 @@ func forwardRCT(r, g, b [][]int32) (y, cb, cr [][]int32) {
 	}
 	width := len(r[0])
 
-	y = make([][]int32, height)
-	cb = make([][]int32, height)
-	cr = make([][]int32, height)
+	buf := getInt32Buf(width, height)
+	defer putInt32Buf(buf)
 
-	for i := range height {
-		y[i] = make([]int32, width)
-		cb[i] = make([]int32, width)
-		cr[i] = make([]int32, width)
+	// Copy inputs into pooled images
+	slicesToImageInPlace(r, buf.imgs[0])
+	slicesToImageInPlace(g, buf.imgs[1])
+	slicesToImageInPlace(b, buf.imgs[2])
 
-		for j := range width {
-			// Y = floor((R + 2G + B) / 4)
-			y[i][j] = (r[i][j] + 2*g[i][j] + b[i][j]) >> 2
-			// Cb = B - G
-			cb[i][j] = b[i][j] - g[i][j]
-			// Cr = R - G
-			cr[i][j] = r[i][j] - g[i][j]
-		}
-	}
+	// Apply SIMD forward RCT
+	hwyimage.ForwardRCT(buf.imgs[0], buf.imgs[1], buf.imgs[2], buf.imgs[3], buf.imgs[4], buf.imgs[5])
+
+	// Convert back to slices
+	y = imageToSlices(buf.imgs[3])
+	cb = imageToSlices(buf.imgs[4])
+	cr = imageToSlices(buf.imgs[5])
 
 	return y, cb, cr
 }
@@ -132,41 +120,21 @@ func forwardICT(r, g, b [][]float64) (y, cb, cr [][]float64) {
 	}
 	width := len(r[0])
 
-	y = make([][]float64, height)
-	cb = make([][]float64, height)
-	cr = make([][]float64, height)
+	buf := getFloat64Buf(width, height)
+	defer putFloat64Buf(buf)
 
-	const (
-		// Forward ICT coefficients (ITU-T T.800 Table G.2)
-		rToY  = 0.299
-		gToY  = 0.587
-		bToY  = 0.114
-		rToCb = -0.16875
-		gToCb = -0.33126
-		bToCb = 0.5
-		rToCr = 0.5
-		gToCr = -0.41869
-		bToCr = -0.08131
-	)
+	// Copy inputs into pooled images
+	slicesToImageInPlace(r, buf.imgs[0])
+	slicesToImageInPlace(g, buf.imgs[1])
+	slicesToImageInPlace(b, buf.imgs[2])
 
-	for i := range height {
-		y[i] = make([]float64, width)
-		cb[i] = make([]float64, width)
-		cr[i] = make([]float64, width)
+	// Apply SIMD forward ICT
+	hwyimage.ForwardICT(buf.imgs[0], buf.imgs[1], buf.imgs[2], buf.imgs[3], buf.imgs[4], buf.imgs[5])
 
-		for j := range width {
-			rv := r[i][j]
-			gv := g[i][j]
-			bv := b[i][j]
-
-			// Y = 0.299*R + 0.587*G + 0.114*B
-			y[i][j] = rToY*rv + gToY*gv + bToY*bv
-			// Cb = -0.16875*R - 0.33126*G + 0.5*B
-			cb[i][j] = rToCb*rv + gToCb*gv + bToCb*bv
-			// Cr = 0.5*R - 0.41869*G - 0.08131*B
-			cr[i][j] = rToCr*rv + gToCr*gv + bToCr*bv
-		}
-	}
+	// Convert back to slices
+	y = imageToSlices(buf.imgs[3])
+	cb = imageToSlices(buf.imgs[4])
+	cr = imageToSlices(buf.imgs[5])
 
 	return y, cb, cr
 }

@@ -62,7 +62,10 @@ func TestSynthesize1D_53_RoundTrip(t *testing.T) {
 			analyze1D_53(tt.data)
 
 			// Inverse transform
-			synthesize1D_53(tt.data)
+			maxHalf := (len(tt.data) + 1) / 2
+			low := make([]int32, maxHalf)
+			high := make([]int32, maxHalf)
+			synthesize1D_53(tt.data, low, high, 0)
 
 			// Check reconstruction within tolerance
 			for i := range original {
@@ -418,7 +421,9 @@ func TestSynthesize2D_MultiLevel(t *testing.T) {
 func TestEdgeCases(t *testing.T) {
 	t.Run("empty array", func(t *testing.T) {
 		data53 := []int32{}
-		synthesize1D_53(data53) // Should not panic
+		low53 := make([]int32, 1)
+		high53 := make([]int32, 1)
+		synthesize1D_53(data53, low53, high53, 0) // Should not panic
 
 		data97 := []float64{}
 		synthesize1D_97(data97) // Should not panic
@@ -428,7 +433,9 @@ func TestEdgeCases(t *testing.T) {
 		// 5/3: single element with cas=0 should be unchanged
 		data53 := []int32{42}
 		original53 := data53[0]
-		synthesize1D_53(data53)
+		low53 := make([]int32, 1)
+		high53 := make([]int32, 1)
+		synthesize1D_53(data53, low53, high53, 0)
 		if data53[0] != original53 {
 			t.Errorf("got %d, want %d", data53[0], original53)
 		}
@@ -503,11 +510,14 @@ func TestSynthesize1D_53_Cas1(t *testing.T) {
 			copy(data, tt.input)
 
 			// Run cas=1 synthesis
-			synthesize1D_53_cas(data, 1)
+			n := len(data)
+			maxHalf := (n + 1) / 2
+			low := make([]int32, maxHalf)
+			high := make([]int32, maxHalf)
+			synthesize1D_53(data, low, high, 1)
 
 			// Verify interleaving: for cas=1, output[2*i] = high[i], output[2*i+1] = low[i]
 			var sn, dn int
-			n := len(data)
 			dn = (n + 1) / 2
 			sn = n / 2
 
@@ -630,7 +640,10 @@ func TestSynthesize1D_53_Cas1_RoundTrip(t *testing.T) {
 			t.Logf("Coeffs (packed): %v", coeffs)
 
 			// Inverse transform with cas=1
-			synthesize1D_53_cas(coeffs, 1)
+			maxHalf := (n + 1) / 2
+			lowBuf := make([]int32, maxHalf)
+			highBuf := make([]int32, maxHalf)
+			synthesize1D_53(coeffs, lowBuf, highBuf, 1)
 
 			t.Logf("After inverse: %v", coeffs)
 
@@ -651,29 +664,8 @@ func TestSynthesize1D_53_Cas1_RoundTrip(t *testing.T) {
 
 // Benchmarks
 
-// BenchmarkSynthesize1D_53 benchmarks the allocating 1D 5/3 path.
-// Note: the real 2D decode path uses synthesize1D_53_bufs with pre-allocated buffers.
+// BenchmarkSynthesize1D_53 benchmarks the 1D 5/3 path with pre-allocated buffers.
 func BenchmarkSynthesize1D_53(b *testing.B) {
-	sizes := []int{8, 16, 32, 64, 128, 256, 512, 1024}
-
-	for _, size := range sizes {
-		b.Run(string(rune(size)), func(b *testing.B) {
-			data := make([]int32, size)
-			for i := range data {
-				data[i] = int32(i)
-			}
-
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				synthesize1D_53(data)
-			}
-		})
-	}
-}
-
-// BenchmarkSynthesize1D_53_Bufs benchmarks the zero-alloc 1D 5/3 path
-// with pre-allocated buffers (matching the real 2D decode path).
-func BenchmarkSynthesize1D_53_Bufs(b *testing.B) {
 	sizes := []int{8, 16, 32, 64, 128, 256, 512, 1024}
 
 	for _, size := range sizes {
@@ -688,7 +680,7 @@ func BenchmarkSynthesize1D_53_Bufs(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				synthesize1D_53_bufs(data, low, high, 0)
+				synthesize1D_53(data, low, high, 0)
 			}
 		})
 	}

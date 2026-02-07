@@ -3,6 +3,7 @@ package jpeg2000
 import (
 	"math"
 
+	"github.com/ajroetker/go-highway/hwy"
 	"github.com/ajroetker/go-highway/hwy/contrib/wavelet"
 )
 
@@ -46,23 +47,9 @@ func (b *dwtBufs97) ensure(n int) {
 	}
 }
 
-// synthesize1D_53 performs in-place 1D inverse 5/3 wavelet transform
-// Input: [L0, L1, ..., H0, H1, ...] where first half is low-pass, second half is high-pass
-// Output: reconstructed signal [even0, odd0, even1, odd1, ...]
-func synthesize1D_53(data []int32) {
-	wavelet.Synthesize53(data, 0)
-}
-
-// synthesize1D_53_cas performs 1D inverse 5/3 transform with parity control
-// cas=0: first output sample is at even position (standard case)
-// cas=1: first output sample is at odd position (for tiles starting at odd coordinates)
-func synthesize1D_53_cas(data []int32, cas int) {
-	wavelet.Synthesize53(data, cas)
-}
-
-// synthesize1D_53_bufs performs the 5/3 inverse transform using pre-allocated buffers.
-func synthesize1D_53_bufs(data []int32, low, high []int32, cas int) {
-	wavelet.Synthesize53Bufs(data, cas, low, high)
+// synthesize1D_53 performs the 5/3 inverse transform using pre-allocated buffers.
+func synthesize1D_53(data []int32, low, high []int32, cas int) {
+	wavelet.Synthesize53(data, cas, low, high)
 }
 
 // synthesize1D_97 performs in-place 1D inverse 9/7 wavelet transform
@@ -152,6 +139,14 @@ func Synthesize2D_53(coeffs [][]int32, width, height, levels int) {
 	high53 := make([]int32, maxHalf)
 	col := make([]int32, height)
 
+	// The column-batched kernel processes `lanes` columns per SIMD vector.
+	// lanes must match hwy.MaxLanes[int32]() so the kernel's internal
+	// hwy.Load/Store widths align with the column-interleaved layout.
+	lanes := hwy.MaxLanes[int32]()
+	colBuf := make([]int32, height*lanes)
+	lowCols := make([]int32, maxHalf*lanes)
+	highCols := make([]int32, maxHalf*lanes)
+
 	// Process from coarsest to finest level
 	for level := levels; level >= 1; level-- {
 		levelWidth := (width + (1 << (level - 1)) - 1) >> (level - 1)
@@ -159,15 +154,26 @@ func Synthesize2D_53(coeffs [][]int32, width, height, levels int) {
 
 		// Horizontal synthesis first (process rows)
 		for y := range levelHeight {
-			synthesize1D_53_bufs(coeffs[y][:levelWidth], low53, high53, 0)
+			synthesize1D_53(coeffs[y][:levelWidth], low53, high53, 0)
 		}
 
-		// Vertical synthesis second (process columns)
-		for x := range levelWidth {
+		// Vertical synthesis: process `lanes` columns at a time
+		x := 0
+		for ; x+lanes <= levelWidth; x += lanes {
+			for y := range levelHeight {
+				copy(colBuf[y*lanes:y*lanes+lanes], coeffs[y][x:x+lanes])
+			}
+			wavelet.Synthesize53Cols(colBuf[:levelHeight*lanes], levelHeight, 0, lowCols, highCols)
+			for y := range levelHeight {
+				copy(coeffs[y][x:x+lanes], colBuf[y*lanes:y*lanes+lanes])
+			}
+		}
+		// Scalar remainder
+		for ; x < levelWidth; x++ {
 			for y := range levelHeight {
 				col[y] = coeffs[y][x]
 			}
-			synthesize1D_53_bufs(col[:levelHeight], low53, high53, 0)
+			synthesize1D_53(col[:levelHeight], low53, high53, 0)
 			for y := range levelHeight {
 				coeffs[y][x] = col[y]
 			}
@@ -203,9 +209,13 @@ func Synthesize2D_53_WithDims(coeffs [][]int32, resDims []ResBounds) {
 		}
 	}
 	maxHalf := (maxDim + 1) / 2
+	lanes := hwy.MaxLanes[int32]()
 	low53 := make([]int32, maxHalf)
 	high53 := make([]int32, maxHalf)
 	col := make([]int32, maxDim)
+	colBuf := make([]int32, maxDim*lanes)
+	lowCols := make([]int32, maxHalf*lanes)
+	highCols := make([]int32, maxHalf*lanes)
 
 	// Process from coarsest to finest level
 	for level := levels; level >= 1; level-- {
@@ -218,15 +228,26 @@ func Synthesize2D_53_WithDims(coeffs [][]int32, resDims []ResBounds) {
 
 		// Horizontal synthesis first (process rows)
 		for y := range levelHeight {
-			synthesize1D_53_bufs(coeffs[y][:levelWidth], low53, high53, casH)
+			synthesize1D_53(coeffs[y][:levelWidth], low53, high53, casH)
 		}
 
-		// Vertical synthesis second (process columns)
-		for x := range levelWidth {
+		// Vertical synthesis: process `lanes` columns at a time
+		x := 0
+		for ; x+lanes <= levelWidth; x += lanes {
+			for y := range levelHeight {
+				copy(colBuf[y*lanes:y*lanes+lanes], coeffs[y][x:x+lanes])
+			}
+			wavelet.Synthesize53Cols(colBuf[:levelHeight*lanes], levelHeight, casV, lowCols, highCols)
+			for y := range levelHeight {
+				copy(coeffs[y][x:x+lanes], colBuf[y*lanes:y*lanes+lanes])
+			}
+		}
+		// Scalar remainder
+		for ; x < levelWidth; x++ {
 			for y := range levelHeight {
 				col[y] = coeffs[y][x]
 			}
-			synthesize1D_53_bufs(col[:levelHeight], low53, high53, casV)
+			synthesize1D_53(col[:levelHeight], low53, high53, casV)
 			for y := range levelHeight {
 				coeffs[y][x] = col[y]
 			}
@@ -329,7 +350,10 @@ func Synthesize2D_97_WithDims(coeffs [][]float64, resDims []ResBounds) {
 // Input: signal [s0, s1, s2, s3, ...]
 // Output: [L0, L1, ..., H0, H1, ...] (low-pass first, then high-pass)
 func analyze1D_53(data []int32) {
-	wavelet.Analyze53(data, 0)
+	maxHalf := (len(data) + 1) / 2
+	low := make([]int32, maxHalf)
+	high := make([]int32, maxHalf)
+	wavelet.Analyze53(data, 0, low, high)
 }
 
 // analyze1D_97 performs forward 1D 9/7 wavelet transform (for testing)
@@ -369,7 +393,10 @@ func roundTripError_53(original []int32) int32 {
 	copy(data, original)
 
 	analyze1D_53(data)
-	synthesize1D_53(data)
+	maxHalf := (len(data) + 1) / 2
+	low := make([]int32, maxHalf)
+	high := make([]int32, maxHalf)
+	synthesize1D_53(data, low, high, 0)
 
 	var maxErr int32
 	for i := range original {

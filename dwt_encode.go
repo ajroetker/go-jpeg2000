@@ -35,7 +35,7 @@ func Analyze2D_53(coeffs [][]int32, width, height, levels int) {
 			for y := range levelHeight {
 				col[y] = coeffs[y][x]
 			}
-			wavelet.Analyze53Bufs(col[:levelHeight], 0, low53, high53)
+			wavelet.Analyze53(col[:levelHeight], 0, low53, high53)
 			for y := range levelHeight {
 				coeffs[y][x] = col[y]
 			}
@@ -43,7 +43,7 @@ func Analyze2D_53(coeffs [][]int32, width, height, levels int) {
 
 		// Horizontal analysis second (process rows)
 		for y := range levelHeight {
-			wavelet.Analyze53Bufs(coeffs[y][:levelWidth], 0, low53, high53)
+			wavelet.Analyze53(coeffs[y][:levelWidth], 0, low53, high53)
 		}
 	}
 }

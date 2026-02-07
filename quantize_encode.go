@@ -101,24 +101,18 @@ func computeExpMantissa(stepSize float64, bitDepth int) (int, int) {
 
 	// ε_b = R_b - floor(log2(Δ_b))
 	log2Step := math.Floor(math.Log2(stepSize))
-	exponent := bitDepth - int(log2Step)
-
-	// Clamp exponent to 5-bit range [0, 31]
-	if exponent < 0 {
-		exponent = 0
-	}
+	exponent := max(
+		// Clamp exponent to 5-bit range [0, 31]
+		bitDepth-int(log2Step), 0)
 	if exponent > 31 {
 		exponent = 31
 	}
 
 	// μ_b = round((Δ_b / 2^(R_b - ε_b) - 1) * 2^11)
 	normalized := stepSize / math.Pow(2, float64(bitDepth-exponent))
-	mantissa := int(math.Round((normalized - 1.0) * 2048.0))
-
-	// Clamp mantissa to 11-bit range [0, 2047]
-	if mantissa < 0 {
-		mantissa = 0
-	}
+	mantissa := max(
+		// Clamp mantissa to 11-bit range [0, 2047]
+		int(math.Round((normalized-1.0)*2048.0)), 0)
 	if mantissa > 2047 {
 		mantissa = 2047
 	}

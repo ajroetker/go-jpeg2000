@@ -166,11 +166,11 @@ func makeInt32Slices(width, height int) (r, g, b [][]int32) {
 	r = make([][]int32, height)
 	g = make([][]int32, height)
 	b = make([][]int32, height)
-	for y := 0; y < height; y++ {
+	for y := range height {
 		r[y] = make([]int32, width)
 		g[y] = make([]int32, width)
 		b[y] = make([]int32, width)
-		for x := 0; x < width; x++ {
+		for x := range width {
 			r[y][x] = int32((x + y) % 256)
 			g[y][x] = int32((x + y + 85) % 256)
 			b[y][x] = int32((x + y + 170) % 256)
@@ -183,11 +183,11 @@ func makeFloat64Slices(width, height int) (r, g, b [][]float64) {
 	r = make([][]float64, height)
 	g = make([][]float64, height)
 	b = make([][]float64, height)
-	for y := 0; y < height; y++ {
+	for y := range height {
 		r[y] = make([]float64, width)
 		g[y] = make([]float64, width)
 		b[y] = make([]float64, width)
-		for x := 0; x < width; x++ {
+		for x := range width {
 			r[y][x] = float64((x+y)%256) / 255.0
 			g[y][x] = float64((x+y+85)%256) / 255.0
 			b[y][x] = float64((x+y+170)%256) / 255.0

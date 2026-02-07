@@ -31,7 +31,7 @@ func slicesToImage[T hwy.Lanes](data [][]T) *image.Image[T] {
 	width := len(data[0])
 
 	img := image.NewImage[T](width, height)
-	for y := 0; y < height; y++ {
+	for y := range height {
 		row := img.Row(y)
 		copy(row[:width], data[y])
 	}
@@ -48,7 +48,7 @@ func imageToSlices[T hwy.Lanes](img *image.Image[T]) [][]T {
 	height := img.Height()
 
 	data := make([][]T, height)
-	for y := 0; y < height; y++ {
+	for y := range height {
 		data[y] = make([]T, width)
 		row := img.Row(y)
 		copy(data[y], row[:width])
@@ -65,7 +65,7 @@ func slicesToImageInPlace[T hwy.Lanes](data [][]T, img *image.Image[T]) {
 	height := len(data)
 	width := len(data[0])
 
-	for y := 0; y < height; y++ {
+	for y := range height {
 		row := img.Row(y)
 		copy(row[:width], data[y])
 	}
@@ -80,7 +80,7 @@ func imageToSlicesInPlace[T hwy.Lanes](img *image.Image[T], data [][]T) {
 	width := img.Width()
 	height := img.Height()
 
-	for y := 0; y < height; y++ {
+	for y := range height {
 		row := img.Row(y)
 		copy(data[y][:width], row[:width])
 	}

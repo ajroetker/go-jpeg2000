@@ -116,10 +116,7 @@ func newEncoder(img image.Image, opts *EncodeOptions) *encoder {
 
 	// Limit decomposition levels to image dimensions
 	numLevels := e.opts.NumResolutions - 1
-	minDim := e.width
-	if e.height < minDim {
-		minDim = e.height
-	}
+	minDim := min(e.height, e.width)
 	maxLevels := 0
 	for d := minDim; d > 1; d = (d + 1) / 2 {
 		maxLevels++
@@ -172,42 +169,42 @@ func (e *encoder) buildHeader() *MainHeader {
 		// Reversible: exponents only, no mantissa
 		// Exponent = guard bits + bit depth + gain
 		guardBits := 1
-		for i := 0; i < numSubbands; i++ {
+		for i := range numSubbands {
 			gain := subbandGain53(i, numLevels)
 			exponents[i] = guardBits + e.bitDepth + gain
 		}
 	} else {
 		quantStyle = 2 // Scalar expounded
 		stepSizes := defaultStepSizes(e.opts.Quality, numLevels, e.bitDepth)
-		for i := 0; i < numSubbands; i++ {
+		for i := range numSubbands {
 			exponents[i], mantissas[i] = computeExpMantissa(stepSizes[i], e.bitDepth)
 		}
 	}
 
 	h := &MainHeader{
-		Width:           e.width,
-		Height:          e.height,
-		TileWidth:       tileW,
-		TileHeight:      tileH,
-		NumComps:        e.numComps,
-		BitDepth:        bitDepths,
-		Signed:          signed,
-		XRsiz:           xrsiz,
-		YRsiz:           yrsiz,
+		Width:            e.width,
+		Height:           e.height,
+		TileWidth:        tileW,
+		TileHeight:       tileH,
+		NumComps:         e.numComps,
+		BitDepth:         bitDepths,
+		Signed:           signed,
+		XRsiz:            xrsiz,
+		YRsiz:            yrsiz,
 		ProgressionOrder: e.opts.Progression,
-		NumLayers:       e.opts.NumLayers,
-		MCT:             e.numComps >= 3,
-		NumDecompLevels: numLevels,
-		CodeBlockWidth:  e.opts.CodeBlockWidth,
-		CodeBlockHeight: e.opts.CodeBlockHeight,
-		WaveletFilter:   wavelet,
-		QuantStyle:      quantStyle,
-		GuardBits:       1,
-		Exponents:       exponents,
-		Mantissas:       mantissas,
-		NumXTiles:       numXTiles,
-		NumYTiles:       numYTiles,
-		NumTiles:        numXTiles * numYTiles,
+		NumLayers:        e.opts.NumLayers,
+		MCT:              e.numComps >= 3,
+		NumDecompLevels:  numLevels,
+		CodeBlockWidth:   e.opts.CodeBlockWidth,
+		CodeBlockHeight:  e.opts.CodeBlockHeight,
+		WaveletFilter:    wavelet,
+		QuantStyle:       quantStyle,
+		GuardBits:        1,
+		Exponents:        exponents,
+		Mantissas:        mantissas,
+		NumXTiles:        numXTiles,
+		NumYTiles:        numYTiles,
+		NumTiles:         numXTiles * numYTiles,
 	}
 
 	e.header = h
@@ -296,11 +293,11 @@ func (e *encoder) applyForwardColorTransform(comps [][][]int32) [][][]int32 {
 	rf := make([][]float64, height)
 	gf := make([][]float64, height)
 	bf := make([][]float64, height)
-	for i := 0; i < height; i++ {
+	for i := range height {
 		rf[i] = make([]float64, width)
 		gf[i] = make([]float64, width)
 		bf[i] = make([]float64, width)
-		for j := 0; j < width; j++ {
+		for j := range width {
 			rf[i][j] = float64(comps[0][i][j])
 			gf[i][j] = float64(comps[1][i][j])
 			bf[i][j] = float64(comps[2][i][j])
@@ -311,7 +308,7 @@ func (e *encoder) applyForwardColorTransform(comps [][][]int32) [][][]int32 {
 
 	// Convert back to int32 via quantization (done later), but for now store as int32
 	result := make([][][]int32, 3)
-	for c := 0; c < 3; c++ {
+	for c := range 3 {
 		result[c] = make([][]int32, height)
 		var src [][]float64
 		switch c {
@@ -322,9 +319,9 @@ func (e *encoder) applyForwardColorTransform(comps [][][]int32) [][][]int32 {
 		case 2:
 			src = crf
 		}
-		for i := 0; i < height; i++ {
+		for i := range height {
 			result[c][i] = make([]int32, width)
-			for j := 0; j < width; j++ {
+			for j := range width {
 				result[c][i][j] = int32(math.Round(src[i][j]))
 			}
 		}
@@ -353,7 +350,7 @@ func (e *encoder) encodeTile(components [][][]int32, tileX, tileY, numLevels int
 	tileComps := make([][][]int32, e.numComps)
 	for c := 0; c < e.numComps; c++ {
 		tileComps[c] = make([][]int32, th)
-		for y := 0; y < th; y++ {
+		for y := range th {
 			tileComps[c][y] = make([]int32, tw)
 			copy(tileComps[c][y], components[c][ty0+y][tx0:tx1])
 		}
@@ -368,9 +365,9 @@ func (e *encoder) encodeTile(components [][][]int32, tileX, tileY, numLevels int
 		// For lossy, work in float64 for DWT then quantize
 		for c := 0; c < e.numComps; c++ {
 			fcoeffs := make([][]float64, th)
-			for y := 0; y < th; y++ {
+			for y := range th {
 				fcoeffs[y] = make([]float64, tw)
-				for x := 0; x < tw; x++ {
+				for x := range tw {
 					fcoeffs[y][x] = float64(tileComps[c][y][x])
 				}
 			}
@@ -397,7 +394,7 @@ func (e *encoder) encodeTile(components [][][]int32, tileX, tileY, numLevels int
 		coeffs := tileComps[c]
 		resolutions[c] = make([]*EncoderResolution, numResolutions)
 
-		for r := 0; r < numResolutions; r++ {
+		for r := range numResolutions {
 			res := &EncoderResolution{Level: r}
 
 			// Determine which subbands belong to this resolution.
@@ -437,17 +434,17 @@ func (e *encoder) encodeTile(components [][][]int32, tileX, tileY, numLevels int
 				mb := header.GuardBits + header.Exponents[sbIdx] - 1
 
 				// Encode each code block
-				for cby := 0; cby < codeBlocksY; cby++ {
-					for cbx := 0; cbx < codeBlocksX; cbx++ {
+				for cby := range codeBlocksY {
+					for cbx := range codeBlocksX {
 						bx0 := cbx * cbw
 						by0 := cby * cbh
 						bw := min(cbw, sbW-bx0)
 						bh := min(cbh, sbH-by0)
 
 						cbCoeffs := make([][]int32, bh)
-						for y := 0; y < bh; y++ {
+						for y := range bh {
 							cbCoeffs[y] = make([]int32, bw)
-							for x := 0; x < bw; x++ {
+							for x := range bw {
 								cbCoeffs[y][x] = coeffs[sbY0+by0+y][sbX0+bx0+x]
 							}
 						}
@@ -491,7 +488,7 @@ func (e *encoder) encodeTile(components [][][]int32, tileX, tileY, numLevels int
 	// Also set FirstLayer on each code block and initialize tag trees.
 	blockIdx := 0
 	for c := 0; c < e.numComps; c++ {
-		for r := 0; r < numResolutions; r++ {
+		for r := range numResolutions {
 			res := resolutions[c][r]
 			if res == nil {
 				continue
@@ -513,10 +510,7 @@ func (e *encoder) encodeTile(components [][][]int32, tileX, tileY, numLevels int
 
 	// Build layerPasses structure for EncodePacketsLRCP:
 	// layerPasses[layer][component][resolution] -> map[blockIdx]numNewPasses
-	numLayers := header.NumLayers
-	if numLayers < 1 {
-		numLayers = 1
-	}
+	numLayers := max(header.NumLayers, 1)
 	layerPasses := make([][][]map[int]int, numLayers)
 	for l := range layerPasses {
 		layerPasses[l] = make([][]map[int]int, e.numComps)
@@ -535,7 +529,7 @@ func (e *encoder) encodeTile(components [][][]int32, tileX, tileY, numLevels int
 	// This offset must match the one used by EncodePacket/encodeSubbandPacketHeader.
 	blockIdx = 0
 	for c := 0; c < e.numComps; c++ {
-		for r := 0; r < numResolutions; r++ {
+		for r := range numResolutions {
 			res := resolutions[c][r]
 			if res == nil {
 				continue
@@ -564,7 +558,7 @@ func (e *encoder) encodeTile(components [][][]int32, tileX, tileY, numLevels int
 // quantizeSubbands applies dead-zone quantization to each subband of a DWT-transformed tile.
 func (e *encoder) quantizeSubbands(coeffs [][]float64, width, height, numLevels int, stepSizes []float64) [][]int32 {
 	result := make([][]int32, height)
-	for y := 0; y < height; y++ {
+	for y := range height {
 		result[y] = make([]int32, width)
 	}
 
@@ -579,8 +573,8 @@ func (e *encoder) quantizeSubbands(coeffs [][]float64, width, height, numLevels 
 			step = 1.0
 		}
 
-		for y := 0; y < sbH; y++ {
-			for x := 0; x < sbW; x++ {
+		for y := range sbH {
+			for x := range sbW {
 				val := coeffs[sbY0+y][sbX0+x]
 				if val >= 0 {
 					result[sbY0+y][sbX0+x] = int32(math.Floor(val / step))
@@ -601,7 +595,7 @@ func subbandBounds(sbIdx, numLevels, tileW, tileH int) (SubbandType, int, int, i
 		// LL at coarsest level
 		llW := tileW
 		llH := tileH
-		for i := 0; i < numLevels; i++ {
+		for range numLevels {
 			llW = (llW + 1) / 2
 			llH = (llH + 1) / 2
 		}
@@ -618,7 +612,7 @@ func subbandBounds(sbIdx, numLevels, tileW, tileH int) (SubbandType, int, int, i
 	// Compute LL dimensions at this level
 	llW := tileW
 	llH := tileH
-	for i := 0; i < level; i++ {
+	for range level {
 		llW = (llW + 1) / 2
 		llH = (llH + 1) / 2
 	}

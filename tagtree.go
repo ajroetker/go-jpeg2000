@@ -418,11 +418,10 @@ func (tt *tagTree) encodeValue(x, y int, bw *bitWriter) {
 func (tt *tagTree) resetStates() {
 	for lvl := 0; lvl < tt.levels; lvl++ {
 		h := len(tt.states[lvl])
-		for y := 0; y < h; y++ {
+		for y := range h {
 			for x := range tt.states[lvl][y] {
 				tt.states[lvl][y][x] = 0
 			}
 		}
 	}
 }
-

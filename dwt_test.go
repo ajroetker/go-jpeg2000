@@ -80,9 +80,8 @@ func TestSynthesize1D_53_RoundTrip(t *testing.T) {
 }
 
 func TestSynthesize1D_97_RoundTrip(t *testing.T) {
-	// Tolerance accounts for float32 precision in inverse DWT (matching OpenJPEG).
-	// Forward transform uses float64 but inverse uses float32 internally,
-	// so round-trip error is dominated by float32 precision (~1e-5).
+	// All arithmetic is now float64 throughout (no float32 conversion),
+	// so round-trip error is limited by float64 precision (~1e-14).
 	tests := []struct {
 		name      string
 		data      []float64
@@ -91,37 +90,37 @@ func TestSynthesize1D_97_RoundTrip(t *testing.T) {
 		{
 			name:      "even length",
 			data:      []float64{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0},
-			tolerance: 1e-4,
+			tolerance: 1e-10,
 		},
 		{
 			name:      "odd length",
 			data:      []float64{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0},
-			tolerance: 1e-4,
+			tolerance: 1e-10,
 		},
 		{
 			name:      "single element",
 			data:      []float64{42.5},
-			tolerance: 1e-4,
+			tolerance: 1e-10,
 		},
 		{
 			name:      "two elements",
 			data:      []float64{10.5, 20.5},
-			tolerance: 2e-4, // Higher tolerance: inverse uses float32 two_invK
+			tolerance: 1e-10,
 		},
 		{
 			name:      "zeros",
 			data:      []float64{0, 0, 0, 0, 0, 0, 0, 0},
-			tolerance: 1e-10,
+			tolerance: 1e-15,
 		},
 		{
 			name:      "alternating",
 			data:      []float64{1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0},
-			tolerance: 1e-4,
+			tolerance: 1e-10,
 		},
 		{
 			name:      "fractional",
 			data:      []float64{1.5, 2.7, 3.9, 4.1, 5.3, 6.8},
-			tolerance: 1e-4,
+			tolerance: 1e-10,
 		},
 	}
 
@@ -255,7 +254,7 @@ func TestSynthesize2D_97_SingleLevel(t *testing.T) {
 	// 4x4 test image
 	width, height := 4, 4
 	levels := 1
-	tolerance := 1e-3 // float32 precision in inverse DWT
+	tolerance := 1e-8 // float64 precision throughout
 
 	// Create test data: simple gradient
 	coeffs := make([][]float64, height)
@@ -355,7 +354,7 @@ func TestSynthesize2D_MultiLevel(t *testing.T) {
 	// Test with multiple decomposition levels
 	width, height := 16, 16
 	levels := 3
-	tolerance := 0.1 // float32 precision in inverse DWT (multi-level accumulates error)
+	tolerance := 1e-6 // float64 precision (multi-level accumulates some error)
 
 	// Create test data with interesting pattern
 	coeffs := make([][]float64, height)
@@ -651,6 +650,9 @@ func TestSynthesize1D_53_Cas1_RoundTrip(t *testing.T) {
 }
 
 // Benchmarks
+
+// BenchmarkSynthesize1D_53 benchmarks the allocating 1D 5/3 path.
+// Note: the real 2D decode path uses synthesize1D_53_bufs with pre-allocated buffers.
 func BenchmarkSynthesize1D_53(b *testing.B) {
 	sizes := []int{8, 16, 32, 64, 128, 256, 512, 1024}
 
@@ -669,6 +671,31 @@ func BenchmarkSynthesize1D_53(b *testing.B) {
 	}
 }
 
+// BenchmarkSynthesize1D_53_Bufs benchmarks the zero-alloc 1D 5/3 path
+// with pre-allocated buffers (matching the real 2D decode path).
+func BenchmarkSynthesize1D_53_Bufs(b *testing.B) {
+	sizes := []int{8, 16, 32, 64, 128, 256, 512, 1024}
+
+	for _, size := range sizes {
+		b.Run(string(rune(size)), func(b *testing.B) {
+			data := make([]int32, size)
+			for i := range data {
+				data[i] = int32(i)
+			}
+			maxHalf := (size + 1) / 2
+			low := make([]int32, maxHalf)
+			high := make([]int32, maxHalf)
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				synthesize1D_53_bufs(data, low, high, 0)
+			}
+		})
+	}
+}
+
+// BenchmarkSynthesize1D_97 benchmarks the allocating 1D 9/7 path.
+// Note: the real 2D decode path uses synthesize1D_97_bufs with pre-allocated buffers.
 func BenchmarkSynthesize1D_97(b *testing.B) {
 	sizes := []int{8, 16, 32, 64, 128, 256, 512, 1024}
 
@@ -682,6 +709,28 @@ func BenchmarkSynthesize1D_97(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				synthesize1D_97(data)
+			}
+		})
+	}
+}
+
+// BenchmarkSynthesize1D_97_Bufs benchmarks the zero-alloc 1D 9/7 path
+// with pre-allocated buffers (matching the real 2D decode path).
+func BenchmarkSynthesize1D_97_Bufs(b *testing.B) {
+	sizes := []int{8, 16, 32, 64, 128, 256, 512, 1024}
+
+	for _, size := range sizes {
+		b.Run(string(rune(size)), func(b *testing.B) {
+			data := make([]float64, size)
+			for i := range data {
+				data[i] = float64(i)
+			}
+			var bufs dwtBufs97
+			bufs.ensure(size)
+
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				synthesize1D_97_bufs(data, &bufs, 0)
 			}
 		})
 	}

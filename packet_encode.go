@@ -377,10 +377,7 @@ func (pe *PacketEncoder) encodePassLengths(
 
 	// Calculate the total data length for the new passes
 	startPass := cb.PassesIncluded
-	endPass := startPass + newPasses
-	if endPass > len(cb.Block.Passes) {
-		endPass = len(cb.Block.Passes)
-	}
+	endPass := min(startPass+newPasses, len(cb.Block.Passes))
 
 	totalLength := 0
 	for i := startPass; i < endPass; i++ {
@@ -458,16 +455,16 @@ func (pe *PacketEncoder) EncodePacketsLRCP(
 
 	// Determine the maximum number of resolutions across all components
 	maxRes := 0
-	for c := 0; c < numComps; c++ {
+	for c := range numComps {
 		if c < len(resolutions) && len(resolutions[c]) > maxRes {
 			maxRes = len(resolutions[c])
 		}
 	}
 
 	// LRCP progression: Layer, Resolution, Component, Position
-	for l := 0; l < numLayers; l++ {
+	for l := range numLayers {
 		for r := 0; r < maxRes; r++ {
-			for c := 0; c < numComps; c++ {
+			for c := range numComps {
 				if c >= len(resolutions) || r >= len(resolutions[c]) {
 					continue
 				}

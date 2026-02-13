@@ -1139,9 +1139,8 @@ func BenchmarkEncodeLossless32x32(b *testing.B) {
 		FileFormat:     FormatJ2K,
 	}
 
-	b.ResetTimer()
 	b.ReportAllocs()
-	for range b.N {
+	for b.Loop() {
 		var buf bytes.Buffer
 		_ = Encode(&buf, img, opts)
 	}
@@ -1163,9 +1162,8 @@ func BenchmarkEncodeLossy64x64(b *testing.B) {
 		FileFormat:     FormatJ2K,
 	}
 
-	b.ResetTimer()
 	b.ReportAllocs()
-	for range b.N {
+	for b.Loop() {
 		var buf bytes.Buffer
 		_ = Encode(&buf, img, opts)
 	}

@@ -228,10 +228,7 @@ func (cw *CodestreamWriter) writeCOD() error {
 	}
 
 	// SGcod: number of layers (2 bytes)
-	numLayers := h.NumLayers
-	if numLayers < 1 {
-		numLayers = 1
-	}
+	numLayers := max(h.NumLayers, 1)
 	if err := writeUint16(cw.w, uint16(numLayers)); err != nil {
 		return err
 	}
@@ -288,7 +285,7 @@ func (cw *CodestreamWriter) writeCOD() error {
 	// SPcod: precinct sizes (if Scod bit 0 is set)
 	// One byte per resolution level: PPx (low 4 bits) | PPy (high 4 bits)
 	if hasCustomPrecincts {
-		for r := 0; r < numResLevels; r++ {
+		for r := range numResLevels {
 			var ppx, ppy int
 			if r < len(h.PrecinctSizes) {
 				ppx = h.PrecinctSizes[r][0]

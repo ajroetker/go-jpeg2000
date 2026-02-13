@@ -111,7 +111,7 @@ func (rc *RateController) OptimizeLayers(targetBytesPerLayer []int) []LayerAlloc
 	// across all previous layers.
 	allocatedPasses := make([]int, numBlocks)
 
-	for layer := 0; layer < numLayers; layer++ {
+	for layer := range numLayers {
 		allocations[layer] = LayerAllocation{
 			NumPasses: make([]int, numBlocks),
 		}
@@ -301,7 +301,7 @@ func (rc *RateController) bisectLambda(slopes []TruncationPoint, targetBytes int
 
 	// Perform enough iterations for convergence (50 iterations gives
 	// precision well beyond what floating-point slopes require).
-	for iter := 0; iter < 50; iter++ {
+	for range 50 {
 		mid := (lo + hi) / 2.0
 
 		totalBytes := 0
@@ -383,7 +383,7 @@ func (rc *RateController) applyThreshold(lambda float64, slopes []TruncationPoin
 		})
 	}
 
-	for bi := 0; bi < numBlocks; bi++ {
+	for bi := range numBlocks {
 		passes, ok := blockSlopes[bi]
 		if !ok {
 			continue

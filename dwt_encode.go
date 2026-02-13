@@ -1,5 +1,9 @@
 package jpeg2000
 
+import (
+	"github.com/ajroetker/go-highway/hwy/contrib/wavelet"
+)
+
 // Analyze2D_53 performs forward 2D 5/3 wavelet transform (lossless).
 // Input: image samples in coeffs[y][x].
 // Output: subbands arranged as [LL, LH; HL, HH] per level.
@@ -14,21 +18,24 @@ func Analyze2D_53(coeffs [][]int32, width, height, levels int) {
 		return
 	}
 
+	// Pre-allocate reusable buffers for the largest dimension.
+	maxDim := max(width, height)
+	maxHalf := (maxDim + 1) / 2
+	low53 := make([]int32, maxHalf)
+	high53 := make([]int32, maxHalf)
+	col := make([]int32, height)
+
 	// Process from finest to coarsest level
 	for level := 1; level <= levels; level++ {
-		// At level L (1-indexed), the working region is the LL subband
-		// from the previous decomposition, with dimensions ceil(size / 2^(L-1)).
-		// This matches the dimension formula used in Synthesize2D_53.
 		levelWidth := (width + (1 << (level - 1)) - 1) >> (level - 1)
 		levelHeight := (height + (1 << (level - 1)) - 1) >> (level - 1)
 
 		// Vertical analysis first (process columns)
 		for x := range levelWidth {
-			col := make([]int32, levelHeight)
 			for y := range levelHeight {
 				col[y] = coeffs[y][x]
 			}
-			analyze1D_53(col)
+			wavelet.Analyze53(col[:levelHeight], 0, low53, high53)
 			for y := range levelHeight {
 				coeffs[y][x] = col[y]
 			}
@@ -36,7 +43,7 @@ func Analyze2D_53(coeffs [][]int32, width, height, levels int) {
 
 		// Horizontal analysis second (process rows)
 		for y := range levelHeight {
-			analyze1D_53(coeffs[y][:levelWidth])
+			wavelet.Analyze53(coeffs[y][:levelWidth], 0, low53, high53)
 		}
 	}
 }
@@ -55,21 +62,20 @@ func Analyze2D_97(coeffs [][]float64, width, height, levels int) {
 		return
 	}
 
+	// Pre-allocate column buffer outside the loop.
+	col := make([]float64, height)
+
 	// Process from finest to coarsest level
 	for level := 1; level <= levels; level++ {
-		// At level L (1-indexed), the working region is the LL subband
-		// from the previous decomposition, with dimensions ceil(size / 2^(L-1)).
-		// This matches the dimension formula used in Synthesize2D_97.
 		levelWidth := (width + (1 << (level - 1)) - 1) >> (level - 1)
 		levelHeight := (height + (1 << (level - 1)) - 1) >> (level - 1)
 
 		// Vertical analysis first (process columns)
 		for x := range levelWidth {
-			col := make([]float64, levelHeight)
 			for y := range levelHeight {
 				col[y] = coeffs[y][x]
 			}
-			analyze1D_97(col)
+			analyze1D_97(col[:levelHeight])
 			for y := range levelHeight {
 				coeffs[y][x] = col[y]
 			}

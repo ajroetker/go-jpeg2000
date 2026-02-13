@@ -1,2 +1,4 @@
+github.com/ajroetker/go-highway v0.0.4 h1:RDQo+9OhTXI6BFctLo+5gYpHNbb92VYJ0ObnR4l6xAQ=
+github.com/ajroetker/go-highway v0.0.4/go.mod h1:C/zYPNSSpOaraejY89FUTZTyQNEhi5+rEbU0LjlqJeU=
 golang.org/x/sys v0.40.0 h1:DBZZqJ2Rkml6QMQsZywtnjnnGvHza6BTfYFWY9kjEWQ=
 golang.org/x/sys v0.40.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
